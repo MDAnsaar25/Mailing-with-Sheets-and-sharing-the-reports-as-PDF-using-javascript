@@ -1,0 +1,200 @@
+#US Demos
+
+function sendReports() {
+  var ss = SpreadsheetApp.openById('1AyZxQSj8ybjyr2FBAxOc0t9zzZHZUbLwCapIG0RFqiY');
+  var sheet = ss.getSheetByName('Sheet1');
+  var data = sheet.getDataRange().getValues();
+  var headersRow = data[1]; // Row containing headers
+  var emailColumn = 1; // Column B
+  var teamLeadEmailColumn = 2; // Column C
+  var ccStaticEmail = 'mohamedansaar@brightchamps.com';
+  var emailSentColumn = 43; // Column AR (0-based index: 44)
+
+  // Add your company's logo image file ID here
+  var logoId = '1ivEaue-PKjWGSFxzm4hTab8bwqlS0RiT';
+
+  for (var i = 2; i < data.length; i++) {
+    var row = data[i];
+    var dateColumn = 3; // Column D
+    var date = new Date(row[dateColumn]);
+    var formattedDate = Utilities.formatDate(date, "GMT+05:30", "MMM dd yyyy");
+    var timeColumn = 4; // Column E
+    var time = new Date(row[timeColumn]);
+    var hours = time.getHours();
+    var email = row[emailColumn];
+    var teamLeadEmail = row[teamLeadEmailColumn];
+    var emailSentStatus = row[emailSentColumn];
+
+    // Check if email has already been sent
+    if (emailSentStatus !== 'Email Sent') {
+      var doc = DocumentApp.create('Report for ' + email);
+      var body = doc.getBody();
+
+      // Add the company logo at the top of the document
+      var logo = DriveApp.getFileById(logoId).getBlob();
+      var centeredParagraph = body.appendParagraph("");
+      centeredParagraph.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+      var image = centeredParagraph.appendInlineImage(logo);
+      image.setHeight(250);
+      image.setWidth(450);
+
+      // Add columns A to H below the logo image
+      for (var j = 0; j <= 7; j++) {
+        // Loop from A (0) to H (7)
+        var value = row[j];
+        if (j === dateColumn) {
+          value = formattedDate;
+        }
+        if (j === timeColumn) {
+          value = hours;
+        }
+        body.appendParagraph(headersRow[j] + ': ' + value);
+      }
+
+      // Add one line break after the image and column info
+      body.appendParagraph('');
+
+      // Define the categories
+      var categories = {
+        'TEACHER APPEARANCE': [8, 13], // Columns I to M
+        'INTRODUCTION AND DEMO FLOW': [13, 20], // Columns N to T
+        'PROJECT EXPLANATION': [20, 24], // Columns U to X
+        'TEACHER ENGAGEMENT AND FOCUS': [24, 28], // Columns Y to AB
+        'COMMUNICATION FLOW': [28, 30], // Columns AC to AD
+        'CLOSING AND HANDOVER': [30, 33], // Columns AE to AG (updated to include AF correctly)
+        'FEEDBACK': [33, 35], // Columns AH to AI
+        'DEMO QUALITY': [35, 43] // Columns AJ to AQ
+      };
+
+      for (var category in categories) {
+        var table = body.appendTable();
+        var cell = table.appendTableRow().appendTableCell(category);
+        cell.setAttributes({
+          [DocumentApp.Attribute.HORIZONTAL_ALIGNMENT]: DocumentApp.HorizontalAlignment.CENTER,
+          [DocumentApp.Attribute.BOLD]: true,
+          [DocumentApp.Attribute.FOREGROUND_COLOR]: '#0000FF'
+        });
+
+        var startColumn = categories[category][0];
+        var endColumn = categories[category][1];
+
+        for (var j = startColumn; j < endColumn; j++) {
+          if (j === 31) { // AF - Handle "Global Fatal" case in CLOSING AND HANDOVER
+            var subheadingText = headersRow[j] + ': ';
+            var subheading = body.appendParagraph(subheadingText);
+            subheading.setBold(true);
+
+            // Set all headers in black
+            subheading.setForegroundColor('#000000');
+
+            // Change "Global Fatal" to red
+            if (subheadingText.includes('Global Fatal')) {
+              var globalFatalIndex = subheadingText.indexOf('Global Fatal');
+              subheading.editAsText().setForegroundColor(globalFatalIndex, globalFatalIndex + 12, '#FF0000');
+            }
+
+            var value = String(row[j]);
+            subheading.appendText(' ' + value);
+          } else if (j !== 36) { // Skip column 36
+            var subheadingText = headersRow[j] + ': ';
+            var subheading = body.appendParagraph(subheadingText);
+            subheading.setBold(true);
+
+            // Set default header color to black
+            subheading.setForegroundColor('#000000');
+
+            if (subheadingText.includes('Global Fatal')) {
+              var globalFatalIndex = subheadingText.indexOf('Global Fatal');
+              subheading.editAsText().setForegroundColor(globalFatalIndex, globalFatalIndex + 12, '#FF0000');
+            }
+
+            var value = String(row[j]);
+            subheading.appendText(' ' + value);
+          }
+        }
+
+        body.appendParagraph(''); // Extra line break after each category
+
+        // Handle feedback in FEEDBACK section
+        if (category === 'FEEDBACK') {
+          var areasOfImprovementIndex = headersRow.indexOf('Areas of improvement:');
+          if (areasOfImprovementIndex !== -1) {
+            var areasOfImprovementValue = row[areasOfImprovementIndex];
+            if (areasOfImprovementValue) {
+              var areasOfImprovementHeader = body.appendParagraph('AREAS OF IMPROVEMENT:');
+              areasOfImprovementHeader.setBold(true);
+              var points = areasOfImprovementValue.split(',');
+              for (var k = 0; k < points.length; k++) {
+                var point = points[k].trim();
+                var pointContent = body.appendParagraph(point);
+                pointContent.setIndentStart(30);
+              }
+              body.appendParagraph(''); // Line break after areas of improvement
+            }
+          }
+
+          // Also include feedback from column AF
+          var feedbackIndex = headersRow.indexOf('Feedback');
+          if (feedbackIndex !== -1) {
+            var feedbackValue = row[feedbackIndex];
+            if (feedbackValue) {
+              var feedbackHeader = body.appendParagraph('FEEDBACK:');
+              feedbackHeader.setBold(true);
+              var feedbackContent = body.appendParagraph(feedbackValue);
+              feedbackContent.setIndentStart(30);
+              body.appendParagraph(''); // Line break after feedback
+            }
+          }
+        }
+
+        // Closing remarks in "CLOSING AND HANDOVER"
+        if (category === 'CLOSING AND HANDOVER') {
+          body.appendParagraph(''); // Extra line break before "Closing and Handover" remarks
+        }
+      }
+
+      // Add the note in red color and bold font
+      var noteParagraph = body.appendParagraph('NOTE: Please ensure compliance with all protocols, as repeated lapses may result in corrective action based on performance.');
+      noteParagraph.setForegroundColor('#FF0000');
+      noteParagraph.setBold(true);
+
+      // Final lines
+      body.appendParagraph(''); // Line break
+      var finalLine = body.appendParagraph('Teachers are encouraged to embrace feedback as a tool for enhancing classroom quality.');
+      finalLine.setForegroundColor('#0000FF');
+
+      // Closing remarks
+      body.appendParagraph('Happy Teaching!');
+      body.appendParagraph('Audit Team, BrightCHAMPS');
+
+      // Save and close the Google Doc
+      doc.saveAndClose();
+
+      // Convert the Google Doc to a PDF
+      var pdf = DriveApp.getFileById(doc.getId()).getAs('application/pdf');
+
+      // Send the PDF as an email attachment
+      var subject = 'Demo Audit Report';
+      var emailBody = 'Dear Teacher,<br><br>' +
+        'In the ever-evolving landscape of education, we are continuously presented with unique challenges that also serve as opportunities for growth and transformation.<br><br>' +
+        'We would like to share audit feedback from your recent class and wish to work together in enhancing the learning experience. While your commendable efforts are appreciated, we believe sharing this feedback will help you stay attentive and vigilant in all your sessions.<br><br>' +
+        '<b style="color:red;">Please Note: Adherence to all protocols, as repeated lapses may result in corrective action based on performance.</b><br><br>' +
+        '<b>Audit Score Guidelines (Calculated based on all <span style="color:red;">Global Fatals</span>):</b><br>' +
+        '<b>Score<85%:</b> </br>' +
+        '<ul> <li><span style="background-color:yellow;"><b>Action:</b> Feedback provided to address specific areas of improvement.<br></span></li>' +
+        '<li><span style="background-color:yellow;"><b>Penalty:</b> After 2 warnings/reports, an audit report is shared to help review and improve performance.<br></span></li>' +
+        '<li><span style="background-color:yellow;"><b>Review:</b> Persistent low scores will result in a performance review, with further actions taken based on overall feedback.</span></li></ul>' +
+        '<br><br>Kind Regards,<br><b>BrightCHAMPS Audit Team</b>';
+      MailApp.sendEmail({
+        to: email,
+        cc: teamLeadEmail + ',' + ccStaticEmail,
+        subject: subject,
+        htmlBody: emailBody,
+        attachments: [pdf]
+      });
+
+      // Mark the email as sent in the Google Sheet
+      sheet.getRange(i + 1, emailSentColumn + 1).setValue('Email Sent');
+    }
+  }
+}
